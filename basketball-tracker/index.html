@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Basketball Stat Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('input')">Input Stats</div>
+  <div class="tab" onclick="showTab('view')">View Stats</div>
+</div>
+
+<div id="input" class="section"></div>
+<div id="view" class="section" style="display:none;"></div>
+
+<div id="courtContainer">
+  <canvas id="courtCanvas"></canvas>
+  <button id="confirmBtn">Confirm Shot</button>
+</div>
+
+<button onclick="exportGame()">Export Game</button>
+<button onclick="importGame()">Load Game</button>
+
+<script src="js/game.js"></script>
+<script src="js/court.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
