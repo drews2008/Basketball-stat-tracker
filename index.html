@@ -2,30 +2,481 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Basketball Stat Tracker</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="css/style.css">
+<title>Pro Ball Tracker - Live Session</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  /* --- GLOBAL STYLES --- */
+  body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background:#111; color:#fff; margin:0; padding:0; display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; }
+  
+  /* --- OVERLAYS --- */
+  #setupOverlay, #assistOverlay, #recapOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #111; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
+  #assistOverlay, #recapOverlay { display: none; flex-direction: column; background: rgba(0,0,0,0.98); z-index: 1100; }
+  
+  /* --- SETUP CARDS --- */
+  .setup-card { background: #222; padding: 25px; border-radius: 12px; border: 1px solid #444; width: 100%; max-width: 450px; text-align: center; max-height: 90vh; display: flex; flex-direction: column; }
+  .setup-scroll { flex: 1; overflow-y: auto; margin: 15px 0; border: 1px solid #333; border-radius: 8px; background: #1a1a1a; padding: 10px; }
+  .mini-archive-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #333; font-size: 0.8rem; }
+  
+  /* --- BUTTONS --- */
+  .start-btn { width: 100%; padding: 14px; background: #00ffcc; color: #000; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 1rem; margin-top:10px; flex-shrink: 0; }
+  .view-btn { background: #007bff; color: white; border: none; padding: 4px 10px; border-radius: 4px; font-size: 0.7rem; cursor: pointer; margin-left: 10px; }
+  .del-btn-small { background: #b71c1c; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.65rem; cursor: pointer; font-weight: bold; }
+  
+  /* --- HEADER & SCOREBOARD --- */
+  header { background:#1a1a1a; padding:10px 15px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #333; flex-shrink: 0; }
+  .score-board { font-size: 1.4rem; font-weight:bold; color:#00ffcc; }
+  
+  /* --- NAVIGATION TABS --- */
+  .tabs { display: flex; background: #000; border-bottom: 1px solid #333; flex-shrink: 0; }
+  .tab { flex: 1; text-align: center; padding: 14px 2px; cursor: pointer; font-size: 0.75rem; font-weight: bold; color: #666; text-transform: uppercase; }
+  .tab.active { background: #1a1a1a; color: #00ffcc; border-bottom: 3px solid #00ffcc; }
+  
+  /* --- LAYOUT SECTIONS --- */
+  .section { display: none; flex: 1; overflow: hidden; width: 100%; flex-direction: column; }
+  .section.active { display: flex; }
+  .main-container { display: flex; flex: 1; overflow: hidden; }
+  .left-side { flex: 0 0 45%; background: #222; display: flex; flex-direction: column; border-right: 2px solid #333; position: relative; }
+  .scroll-container { flex: 1; overflow-y: auto; background: #111; }
+  
+  /* --- CANVAS (COURT) --- */
+  canvas { background: #d2691e; border: 2px solid #fff; border-radius: 4px; width: 95%; margin: 5px auto; touch-action: none; }
+  
+  /* --- DATA TABLES --- */
+  table { width: 100%; border-collapse: collapse; font-size: 0.5rem; text-align: center; }
+
+  th { background: #333; padding: 8px 1px; color: #00ffcc; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #444; }
+  td { padding: 8px 1px; border: 1px solid #222; }
+  .player-link { color: #00ffcc; text-decoration: underline; cursor: pointer; font-weight: bold; }
+  
+  /* --- ARCHIVE CARDS --- */
+  .archive-card { background: #222; margin: 10px; padding: 15px; border-radius: 8px; border-left: 4px solid #00ffcc; display: flex; justify-content: space-between; align-items: center; }
+  
+  /* --- PLAYER ENTRY ROWS --- */
+  .player-row { background: #1a1a1a; border-bottom: 1px solid #2a2a2a; padding: 8px 4px; display: flex; align-items: center; gap: 4px; }
+  .player-row.fouled-out { opacity: 0.5; pointer-events: none; position: relative; }
+  .player-row.fouled-out::after { content: "FOULED OUT"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: red; font-weight: bold; font-size: 1rem; text-shadow: 1px 1px 2px black; }
+  .player-info { width: 55px; font-size: 0.7rem; font-weight: bold; color: #00ffcc; flex-shrink: 0; }
+  
+  /* --- ENTRY BUTTON GRID --- */
+  .btn-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; flex: 1; }
+  button.statBtn { background: #2b2b2b; color: #ddd; border: 1px solid #444; padding: 12px 0; border-radius: 4px; font-size: 0.55rem; font-weight: bold; cursor: pointer; user-select: none; }
+  button.statBtn.pending { border: 1px solid #00ffcc; background: #333; color: #fff; }
+  
+  /* --- BUTTON COLORS --- */
+  button.make { background: #1b5e20; } 
+  button.miss { background: #b71c1c; }
+  button.ft-make { background: #2e7d32; } 
+  button.ft-miss { background: #c62828; }
+</style>
 </head>
 <body>
 
+<div id="recapOverlay">
+    <h2 id="recapTitle" style="color:#00ffcc; margin:0; padding:10px;">Game Recap</h2>
+    <div id="recapFilterMsg" style="color:#00ffcc; font-size:0.8rem; margin-bottom:5px;">Viewing: ALL SHOTS</div>
+    <div style="display: flex; gap: 10px; width: 100%; max-width: 800px; flex-wrap: wrap; justify-content: center;">
+        <canvas id="recapShotMap" width="500" height="470" style="max-width: 250px; height: auto;"></canvas>
+        <div style="flex: 1; min-width: 300px; max-height: 40vh; overflow-y: auto; background: #111; border-radius: 8px;">
+          <table id="recapTable">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>NAME</th>
+            <th>PTS</th>
+            <th>FG%</th>
+            <th>2P</th>
+            <th>3P</th>
+            <th>FT</th>
+            <th>AST</th>
+            <th>OR</th>
+            <th>DR</th>
+            <th>TOT</th>
+            <th>STL</th> <th>TO</th>  <th>PF</th>  </tr>
+    </thead>
+    <tbody id="recapBody"></tbody>
+</table>
+
+        </div>
+    </div>
+    <button class="start-btn" style="width: 200px; background: #555; color: white; margin-top: 15px;" onclick="document.getElementById('recapOverlay').style.display='none'">CLOSE</button>
+</div>
+
+<div id="setupOverlay">
+  <div class="setup-card">
+    <h1 style="color:#00ffcc; margin:0; font-size: 1.5rem;">GAME SETUP</h1>
+    <input type="text" id="oppName" placeholder="Next Opponent..." style="width:100%; padding:14px; background:#333; color:white; border:1px solid #555; border-radius:6px; box-sizing:border-box; margin-top:10px;">
+    <div style="margin-top:20px; font-size:0.85rem; color:#888; text-align:left; font-weight: bold;">PREVIOUS GAMES:</div>
+    <div class="setup-scroll" id="setupHistoryList"></div>
+    <button class="start-btn" onclick="startGame()">START NEW SESSION</button>
+    <button id="resumeBtn" class="start-btn" style="background:#f1c40f; display:none;" onclick="resumeGame()">RESUME CURRENT</button>
+  </div>
+</div>
+
+<div id="assistOverlay">
+  <h2 style="color:#00ffcc">ASSIST CREDIT:</h2>
+  <div id="assistGrid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; width:90%; max-width:400px;"></div>
+  <button class="start-btn" style="margin-top:20px; width:90%; max-width:400px; background:#555; color:white;" onclick="closeAssist(null)">NO ASSIST</button>
+</div>
+
+<header>
+  <div class="score-board">PTS: <span id="teamScore">0</span></div>
+  <div id="oppDisplay" style="font-size: 0.8rem; color: #888; font-weight: bold;"></div>
+</header>
+
 <div class="tabs">
-  <div class="tab active" onclick="showTab('input')">Input Stats</div>
-  <div class="tab" onclick="showTab('view')">View Stats</div>
+  <div class="tab active" id="tab-live" onclick="switchTab('live')">Entry</div>
+  <div class="tab" id="tab-box" onclick="switchTab('box')">Live Stats</div>
+  <div class="tab" id="tab-archive" onclick="switchTab('archive')">Full Archive</div>
 </div>
 
-<div id="input" class="section"></div>
-<div id="view" class="section" style="display:none;"></div>
-
-<div id="courtContainer">
-  <canvas id="courtCanvas"></canvas>
-  <button id="confirmBtn">Confirm Shot</button>
+<div id="live" class="section active">
+  <div class="main-container">
+    <div class="left-side">
+      <button class="statBtn" style="margin:5px; width:90%;" onclick="toggleSides()">🔄 FLIP COURT</button>
+      <canvas id="entryCourt" width="500" height="470"></canvas>
+      <div id="miniLogList" style="background:#000; flex:1; overflow-y:auto; font-size:0.7rem; border-top:1px solid #444;"></div>
+    </div>
+    <div class="scroll-container" id="entryCards"></div>
+  </div>
 </div>
 
-<button onclick="exportGame()">Export Game</button>
-<button onclick="importGame()">Load Game</button>
+<div id="box" class="section">
+    <div style="text-align:center; padding: 10px; background: #222;">
+        <div id="liveFilterMsg" style="color:#00ffcc; font-size:0.7rem; margin-bottom:5px;">Viewing: TEAM MAP</div>
+        <canvas id="liveShotMap" width="500" height="470" style="max-width: 200px; height: auto; cursor:pointer;" onclick="renderLiveMap(null)"></canvas>
+    </div>
+    <div class="scroll-container">
+<table id="boxTable">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>NAME</th>
+            <th>PTS</th>
+            <th>FG%</th>
+            <th>2P</th>
+            <th>3P</th>
+            <th>FT</th>
+            <th>AST</th>
+            <th>OR</th>
+            <th>DR</th>
+            <th>TOT</th>
+            <th>STL</th> <th>TO</th>  <th>PF</th>
+        </tr>
+    </thead>
+    <tbody id="boxBody"></tbody>
+</table>
 
-<script src="basketballtracker/js/game.js"></script>
-<script src="basketballtracker/js/court.js"></script>
-<script src="basketballtracker/js/main.js"></script>
+        <button class="start-btn" style="margin:15px; width:calc(100% - 30px);" onclick="archiveCurrentGame()">🏁 END GAME & SAVE</button>
+    </div>
+</div>
+
+<div id="archive" class="section">
+    <div class="scroll-container" id="archiveList"></div>
+    <button class="start-btn" style="background:#b71c1c; color:white; margin:10px;" onclick="clearArchives()">WIPE ALL ARCHIVES</button>
+</div>
+
+<script>
+// --- CONFIGURATION ---
+const playerMeta = [
+    {num:11,name:"Doug Spencer"},
+    {num:21,name:"Andrew Metheny"},
+    {num:22,name:"Evan Norris"},
+    {num:24,name:"Cristian Garcia"},
+    {num:25,name:"Trenton Metheny"},
+    {num:40,name:"Taylor Hines"}
+];
+
+// --- STATE ---
+let gameState = { opp: "", score: 0, players: {}, playHistory: [], isFlipped: false, shots: [] };
+let activeLoc = null, activeStatType = null;
+let currentRecapGame = null;
+
+// --- INITIALIZATION ---
+window.onload = () => { 
+    if(localStorage.getItem('ball_current')) document.getElementById('resumeBtn').style.display='block';
+    renderSetupHistory();
+};
+
+function startGame() {
+    gameState = { opp: document.getElementById('oppName').value || "Opponent", score: 0, players: {}, playHistory: [], isFlipped: false, shots: [] };
+    playerMeta.forEach(p => { 
+        gameState.players[p.num] = { num:p.num, name:p.name, stats:{"2PM":0,"2PA":0,"3PM":0,"3PA":0,"FTM":0,"FTA":0,"AST":0,"OREB":0,"DREB":0,"STL":0,"TO":0,"PF":0} }; 
+    });
+    document.getElementById('setupOverlay').style.display='none';
+    document.getElementById('oppDisplay').innerText = `VS: ${gameState.opp.toUpperCase()}`;
+    renderEntryList(); updateMiniLog(); drawCourt('entryCourt', false); localStorage.setItem('ball_current', JSON.stringify(gameState));
+}
+
+function resumeGame() { 
+    gameState = JSON.parse(localStorage.getItem('ball_current')); 
+    document.getElementById('setupOverlay').style.display='none'; 
+    document.getElementById('teamScore').innerText = gameState.score;
+    document.getElementById('oppDisplay').innerText = `VS: ${gameState.opp.toUpperCase()}`;
+    renderEntryList(); updateMiniLog(); drawCourt('entryCourt', gameState.isFlipped); 
+}
+
+// --- SETUP & HISTORY ---
+function renderSetupHistory() {
+    const list = document.getElementById('setupHistoryList');
+    let arc = JSON.parse(localStorage.getItem('ball_archives') || "[]");
+    list.innerHTML = arc.length ? "" : "No history.";
+    arc.forEach(g => { list.innerHTML += `<div class="mini-archive-item"><span>${g.date} vs ${g.opp}</span><button class="view-btn" onclick="viewRecap(${g.id})">VIEW</button></div>`; });
+}
+
+function viewRecap(id) {
+    const arc = JSON.parse(localStorage.getItem('ball_archives') || "[]");
+    currentRecapGame = arc.find(game => game.id === id);
+    if(!currentRecapGame) return;
+    
+    document.getElementById('recapTitle').innerText = `${currentRecapGame.date} vs ${currentRecapGame.opp}`;
+    document.getElementById('recapOverlay').style.display = 'flex';
+    renderRecapMap(null);
+
+    const body = document.getElementById('recapBody'); 
+    body.innerHTML = "";
+    
+    Object.values(currentRecapGame.players).forEach(p => {
+        const s = p.stats; 
+        const fga = (s["2PA"] + s["3PA"]);
+        const fgPct = fga ? Math.round(((s["2PM"] + s["3PM"]) / fga) * 100) + '%' : '-';
+        
+        // This row now creates 14 <td> cells to match your 14 <th> headers
+        body.innerHTML += `
+        <tr>
+            <td>${p.num}</td>
+            <td class="player-link" onclick="renderRecapMap(${p.num})">${p.name.split(' ')[0]}</td>
+            <td>${(s["2PM"] * 2) + (s["3PM"] * 3) + s.FTM}</td>
+            <td>${fgPct}</td>
+            <td>${s["2PM"]}/${s["2PA"]}</td>
+            <td>${s["3PM"]}/${s["3PA"]}</td>
+            <td>${s.FTM}/${s.FTA}</td>
+            <td>${s.AST}</td>
+            <td>${s.OREB}</td>
+            <td>${s.DREB}</td>
+            <td>${s.OREB + s.DREB}</td>
+            <td>${s.STL || 0}</td>
+            <td>${s.TO || 0}</td>
+            <td>${s.PF || 0}</td>
+        </tr>`;
+    });
+}
+
+// --- CANVAS & MAPPING ---
+function drawCourt(id, isFlipped) {
+    const c = document.getElementById(id); const ctx = c.getContext('2d');
+    ctx.clearRect(0,0,500,470); ctx.fillStyle="#d2691e"; ctx.fillRect(0,0,500,470); ctx.strokeStyle="#fff"; ctx.lineWidth=3;
+    if(!isFlipped) { ctx.strokeRect(0, 160, 160, 150); ctx.beginPath(); ctx.moveTo(0, 430); ctx.lineTo(80, 430); ctx.arc(0, 235, 230, 1, -1, true); ctx.lineTo(0, 40); ctx.stroke(); }
+    else { ctx.strokeRect(340, 160, 160, 150); ctx.beginPath(); ctx.moveTo(500, 430); ctx.lineTo(420, 430); ctx.arc(500, 235, 230, 2.15, 4.15, false); ctx.lineTo(500, 40); ctx.stroke(); }
+}
+
+function renderRecapMap(pNum) {
+    const ctx = document.getElementById('recapShotMap').getContext('2d');
+    drawCourt('recapShotMap', false);
+    const filterMsg = document.getElementById('recapFilterMsg');
+    filterMsg.innerText = pNum ? `Viewing: #${pNum} Map (Tap map to reset)` : "Viewing: TEAM MAP";
+    document.getElementById('recapShotMap').onclick = () => renderRecapMap(null);
+    
+    currentRecapGame.shots.forEach(s => {
+        if(pNum === null || s.pNum == pNum) {
+            ctx.beginPath(); ctx.arc(s.x, s.y, 8, 0, 2*Math.PI);
+            ctx.fillStyle = s.make ? "#00ffcc" : "#ff4444"; ctx.fill();
+        }
+    });
+}
+
+function renderLiveMap(pNum) {
+    const ctx = document.getElementById('liveShotMap').getContext('2d');
+    drawCourt('liveShotMap', false);
+    document.getElementById('liveFilterMsg').innerText = pNum ? `Viewing: #${pNum} Map (Tap map to reset)` : "Viewing: TEAM MAP";
+    
+    gameState.shots.forEach(s => {
+        if(pNum === null || s.pNum == pNum) {
+            ctx.beginPath(); ctx.arc(s.x, s.y, 8, 0, 2*Math.PI);
+            ctx.fillStyle = s.make ? "#00ffcc" : "#ff4444"; ctx.fill();
+        }
+    });
+}
+
+// --- INTERACTION ---
+// Using pointerdown for both touch and mouse
+document.getElementById('entryCourt').addEventListener('pointerdown', (e) => {
+    e.preventDefault(); 
+    const rect = e.target.getBoundingClientRect();
+    activeLoc = { x: (e.clientX - rect.left) * (500 / rect.width), y: (e.clientY - rect.top) * (470 / rect.height) };
+    if(activeStatType) processShot(); else drawCourt('entryCourt', gameState.isFlipped);
+    if(activeLoc) { const ctx = document.getElementById('entryCourt').getContext('2d'); ctx.beginPath(); ctx.arc(activeLoc.x, activeLoc.y, 10, 0, 7); ctx.fillStyle="#007bff"; ctx.fill(); }
+});
+
+function handleShot(pNum, isMake, e) {
+    if(gameState.players[pNum].stats.PF >= 5) return;
+    activeStatType = { pNum, isMake };
+    document.querySelectorAll('.statBtn').forEach(b => b.classList.remove('pending'));
+    e.target.classList.add('pending');
+    if(activeLoc) processShot();
+}
+function processShot() {
+    const { pNum, isMake } = activeStatType;
+    const hoopX = gameState.isFlipped ? 500 : 0;
+    const dist = Math.sqrt(Math.pow(activeLoc.x - hoopX, 2) + Math.pow(activeLoc.y - 235, 2));
+    const type = dist > 230 ? '3P' : '2P';
+    const shotId = Date.now();
+    
+    // Save normalized coordinates
+    // If flipped, we mirror BOTH X and Y (180 degree rotation)
+    let saveX = activeLoc.x;
+    let saveY = activeLoc.y;
+    
+    if (gameState.isFlipped) {
+        saveX = 500 - activeLoc.x;
+        saveY = 470 - activeLoc.y; // This fix handles the vertical flip
+    }
+
+    gameState.players[pNum].stats[type+"A"]++; 
+    gameState.shots.push({ 
+        id: shotId, 
+        x: saveX, 
+        y: saveY, 
+        make: isMake, 
+        pNum: pNum 
+    });
+
+    if(isMake) { 
+        gameState.players[pNum].stats[type+"M"]++; 
+        gameState.score += (type==='3P'?3:2);
+        document.getElementById('teamScore').innerText = gameState.score;
+        openAssistOverlay(pNum, type, shotId);
+    } else {
+        gameState.playHistory.unshift({ id: shotId, pNum, type, isMake: false, desc: `${type} Miss` });
+        clearInput();
+    }
+}
+
+
+function openAssistOverlay(pNum, type, shotId) {
+    const grid = document.getElementById('assistGrid'); grid.innerHTML = "";
+    Object.values(gameState.players).forEach(p => { if(p.num != pNum) { const btn = document.createElement('button'); btn.className = "start-btn"; btn.innerText = p.name.split(' ')[0]; btn.onclick = () => closeAssist(p.num, pNum, type, shotId); grid.appendChild(btn); } });
+    document.getElementById('assistOverlay').style.display = 'flex';
+}
+
+function closeAssist(passerNum, scorerNum, shotType, shotId) {
+    if(passerNum) gameState.players[passerNum].stats.AST++;
+    gameState.playHistory.unshift({ id: shotId, pNum: scorerNum, passerNum, type: shotType, isMake: true, desc: `${shotType} Make` });
+    document.getElementById('assistOverlay').style.display = 'none';
+    clearInput();
+}
+
+function ftAction(pNum, isMake) {
+    if(gameState.players[pNum].stats.PF >= 5) return;
+    const playId = Date.now();
+    gameState.players[pNum].stats.FTA++;
+    if(isMake) {
+        gameState.players[pNum].stats.FTM++;
+        gameState.score++;
+        gameState.playHistory.unshift({ id: playId, pNum, type: 'FT', isMake: true, desc: "FT Make" });
+    } else {
+        gameState.playHistory.unshift({ id: playId, pNum, type: 'FT', isMake: false, desc: "FT Miss" });
+    }
+    document.getElementById('teamScore').innerText = gameState.score;
+    clearInput();
+}
+
+function simpleStat(pNum, type, desc) {
+    if(gameState.players[pNum].stats.PF >= 5) return;
+    gameState.players[pNum].stats[type]++;
+    gameState.playHistory.unshift({ id: Date.now(), pNum, type, desc });
+    document.getElementById('teamScore').innerText = gameState.score;
+    clearInput();
+}
+
+// --- LOGS & UNDO ---
+function updateMiniLog() {
+    const list = document.getElementById('miniLogList'); list.innerHTML = "";
+    gameState.playHistory.slice(0, 4).forEach(p => { list.innerHTML += `<div style="padding:8px; border-bottom:1px solid #222; display:flex; justify-content:space-between;"><span>#${p.pNum} ${p.desc}</span><button class="del-btn-small" onclick="deletePlay(${p.id})">UNDO</button></div>`; });
+}
+
+function deletePlay(id) {
+    const idx = gameState.playHistory.findIndex(p => p.id === id);
+    if(idx === -1) return;
+    const play = gameState.playHistory[idx];
+    const p = gameState.players[play.pNum];
+    if(play.type === 'FT') { p.stats.FTA--; if(play.isMake) { p.stats.FTM--; gameState.score--; } } 
+    else if(play.type === '2P' || play.type === '3P') {
+        p.stats[play.type+"A"]--;
+        if(play.isMake) { p.stats[play.type+"M"]--; gameState.score -= (play.type==='3P'?3:2); if(play.passerNum) gameState.players[play.passerNum].stats.AST--; }
+        gameState.shots = gameState.shots.filter(s => s.id !== id);
+    } else { p.stats[play.type]--; }
+    gameState.playHistory.splice(idx, 1);
+    document.getElementById('teamScore').innerText = gameState.score;
+    clearInput();
+}
+
+function clearInput() { activeLoc = null; activeStatType = null; document.querySelectorAll('.statBtn').forEach(b => b.classList.remove('pending')); drawCourt('entryCourt', gameState.isFlipped); updateMiniLog(); renderEntryList(); localStorage.setItem('ball_current', JSON.stringify(gameState)); }
+
+// --- RENDERING LISTS ---
+function renderEntryList() {
+    const container = document.getElementById('entryCards'); container.innerHTML = "";
+    Object.values(gameState.players).forEach(p => {
+        container.innerHTML += `<div class="player-row ${p.stats.PF>=5?'fouled-out':''}"><div class="player-info">#${p.num}<br>${p.name.split(' ')[0]}</div><div class="btn-grid">
+            <button class="statBtn make" onclick="handleShot(${p.num},true,event)">MAKE</button><button class="statBtn miss" onclick="handleShot(${p.num},false,event)">MISS</button>
+            <button class="statBtn ft-make" onclick="ftAction(${p.num},true)">FT+</button><button class="statBtn ft-miss" onclick="ftAction(${p.num},false)">FT-</button>
+            <button class="statBtn" onclick="simpleStat(${p.num},'OREB','ORB')">ORB</button><button class="statBtn" onclick="simpleStat(${p.num},'DREB','DRB')">DRB</button>
+            <button class="statBtn" onclick="simpleStat(${p.num},'STL','STL')">STL</button><button class="statBtn" onclick="simpleStat(${p.num},'TO','TO')">TO</button>
+            <button class="statBtn" onclick="simpleStat(${p.num},'PF','PF')">PF (${p.stats.PF})</button></div></div>`;
+    });
+}
+
+function switchTab(id) {
+    document.querySelectorAll('.tab, .section').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-'+id).classList.add('active'); document.getElementById(id).classList.add('active');
+    
+    if(id==='box') {
+        renderLiveMap(null);
+        const body = document.getElementById('boxBody'); 
+        body.innerHTML = "";
+        
+        Object.values(gameState.players).forEach(p => {
+            const s = p.stats; 
+            const fga = (s["2PA"]+s["3PA"]);
+            const fgPct = fga ? Math.round(((s["2PM"]+s["3PM"])/fga)*100)+'%' : '-';
+            
+            body.innerHTML += `<tr>
+                <td>${p.num}</td>
+                <td class="player-link" onclick="renderLiveMap(${p.num})">${p.name.split(' ')[0]}</td>
+                <td>${(s["2PM"]*2)+(s["3PM"]*3)+s.FTM}</td>
+                <td>${fgPct}</td>
+                <td>${s["2PM"]}/${s["2PA"]}</td>
+                <td>${s["3PM"]}/${s["3PA"]}</td>
+                <td>${s.FTM}/${s.FTA}</td>
+                <td>${s.AST}</td>
+                <td>${s.OREB}</td>
+                <td>${s.DREB}</td>
+                <td>${s.OREB+s.DREB}</td>
+                <td>${s.STL}</td>            <td>${s.TO}</td>             <td>${s.PF}</td>
+            </tr>`;
+        });
+    }
+
+    if(id==='archive') {
+        const list = document.getElementById('archiveList'); list.innerHTML = "";
+        JSON.parse(localStorage.getItem('ball_archives') || "[]").forEach(g => {
+            list.innerHTML += `<div class="archive-card"><div><strong>${g.date} vs ${g.opp}</strong><br>Score: ${g.score}</div><div><button class="view-btn" onclick="viewRecap(${g.id})">VIEW</button><button class="del-btn-small" style="margin-left:5px;" onclick="deleteGame(${g.id})">DEL</button></div></div>`;
+        });
+    }
+}
+
+// --- UTILS ---
+function toggleSides() { gameState.isFlipped = !gameState.isFlipped; drawCourt('entryCourt', gameState.isFlipped); }
+function archiveCurrentGame() {
+    if(!confirm("End game?")) return;
+    let arc = JSON.parse(localStorage.getItem('ball_archives') || "[]");
+    arc.unshift({ id: Date.now(), date: new Date().toLocaleDateString(), opp: gameState.opp, score: gameState.score, players: gameState.players, shots: gameState.shots });
+    localStorage.setItem('ball_archives', JSON.stringify(arc));
+    localStorage.removeItem('ball_current');
+    location.reload();
+}
+function deleteGame(id) { if(confirm("Delete?")) { let arc = JSON.parse(localStorage.getItem('ball_archives') || "[]"); arc = arc.filter(g => g.id !== id); localStorage.setItem('ball_archives', JSON.stringify(arc)); switchTab('archive'); renderSetupHistory(); } }
+function clearArchives() { if(confirm("Clear all?")) { localStorage.clear(); location.reload(); } }
+
+</script>
 </body>
 </html>
